@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management  # Используется образ RabbitMQ с поддержкой панели управления
+    container_name: rabbitmq  # Уникальное имя контейнера
+    ports:
+      - "15672:15672" # Открывает доступ к панели управления RabbitMQ на порту 15672
+      - "5672:5672"   # Порт для взаимодействия с брокером сообщений (AMQP протокол)
+    networks:
+      - app_network  # Указывает, что RabbitMQ подключён к пользовательской сети
+    logging:
+      driver: none  # Отключает логирование для контейнера RabbitMQ
+    deploy:
+      resources:
+        limits:
+          cpus: '3'  # Лимит на использование 3 CPU для RabbitMQ
+
+  api:
+    build:
+      context: ./app  # Путь к директории с Dockerfile для API
+      dockerfile: Dockerfile  # Имя Dockerfile
+    container_name: app  # Уникальное имя контейнера для API
+    ports:
+      - "8000:8000"  # Пробрасываем порт API на хост
+    environment:
+      - RABBITMQ_HOST=rabbitmq  # Адрес RabbitMQ для подключения API
+      - RABBITMQ_PORT=5672      # Порт RabbitMQ
+      - DATABASE_PATH=/data/bookstore.db  # Путь к базе данных внутри контейнера
+    volumes:
+      - shared_data:/data  # Разделяемый том для хранения данных
+    depends_on:
+      - rabbitmq  # API запускается после RabbitMQ
+    networks:
+      - app_network  # API подключён к пользовательской сети
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'  # Лимит на использование 0.5 CPU для API
+
+  worker:
+    build:
+      context: ./worker  # Путь к директории с Dockerfile для worker
+      dockerfile: Dockerfile  # Имя Dockerfile
+    environment:
+      - RABBITMQ_HOST=rabbitmq  # Адрес RabbitMQ для подключения worker
+      - RABBITMQ_PORT=5672      # Порт RabbitMQ
+      - DATABASE_PATH=/data/bookstore.db  # Путь к базе данных внутри контейнера
+    volumes:
+      - shared_data:/data  # Разделяемый том для хранения данных
+    depends_on:
+      - rabbitmq  # Worker запускается после RabbitMQ
+    networks:
+      - app_network  # Worker подключён к пользовательской сети
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'  # Лимит на использование 0.5 CPU для Worker
+
+networks:
+  app_network:
+    driver: bridge  # Создаёт мостовую сеть для всех сервисов
+
+volumes:
+  shared_data:
+    # Определяет том для совместного использования данных между контейнерами
